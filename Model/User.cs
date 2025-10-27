@@ -36,5 +36,18 @@
         {
             return CustomProperties;
         }
+
+        public string GetTitle() {
+            return this.Sex == Sex.Male ? "Pan" : "Pani";
+        }
+
+        public int GetAge() {
+            int age = DateTime.UtcNow.Year - DateOfBirth.Year;
+            if (DateOfBirth < DateTime.UtcNow.AddYears(age))
+            {
+                age--;
+            }
+            return age;
+        }
     }
 }
