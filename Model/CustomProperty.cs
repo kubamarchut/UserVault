@@ -13,5 +13,16 @@ namespace UserVault.Model
         {
             return new CustomPropertyDto(Id, Name, Value);
         }
+
+        public static CustomProperty FromDto(CustomPropertyDto dto, int userId)
+        {
+            return new CustomProperty
+            {
+                Id = dto.Id,
+                UserId = userId,
+                Name = dto.Name,
+                Value = dto.Value
+            };
+        }
     }
 }

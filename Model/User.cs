@@ -10,11 +10,10 @@ namespace UserVault.Model
     public class User
     {
         public int Id { get; set; }
-        public string Firstname { get; set; }
-        public string Lastname { get; set; }
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
         public DateTime DateOfBirth { get; set; }
         public Sex Sex { get; set; }
-        public DateTime CreatedAt { get; set; }
 
         private List<CustomProperty> CustomProperties = new();
 
@@ -22,11 +21,10 @@ namespace UserVault.Model
         public User(int id, string firstname, string lastname, DateTime dateOfBirth, Sex sex)
         {
             Id = id;
-            Firstname = firstname;
-            Lastname = lastname;
+            FirstName = firstname;
+            LastName = lastname;
             DateOfBirth = dateOfBirth;
             Sex = sex;
-            CreatedAt = DateTime.UtcNow;
         }
 
         public void AddCustomProperty(CustomProperty property)
@@ -60,7 +58,30 @@ namespace UserVault.Model
         }
         public UserDto ToDto()
         {
-            return new UserDto(Id, Firstname, Lastname, DateOfBirth, Sex.ToString(), CustomProperties.Select(p => p.ToDto()).ToList());
+            return new UserDto(Id, FirstName, LastName, DateOfBirth, Sex.ToString(), CustomProperties.Select(p => p.ToDto()).ToList());
+        }
+        public static User FromDto(UserDto userDto)
+        {
+            if (userDto == null)
+                throw new ArgumentNullException(nameof(userDto));
+
+            var user = new User(
+                userDto.Id,
+                userDto.Firstname,
+                userDto.Lastname,
+                userDto.DateOfBirth,
+                Enum.TryParse<Sex>(userDto.Sex, true, out var sex) ? sex : throw new ArgumentException("Invalid sex value")
+            );
+
+            if (userDto.CustomProperties != null)
+            {
+                foreach (var propDto in userDto.CustomProperties)
+                {
+                    user.AddCustomProperty(CustomProperty.FromDto(propDto, user.Id));
+                }
+            }
+
+            return user;
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using UserVault.Dtos;
+using UserVault.Model;
 
 namespace UserVault.Controllers
 {
@@ -32,19 +33,82 @@ namespace UserVault.Controllers
             return Ok(userDto);
         }
         [HttpPost]
-        public ActionResult CreateUser([FromBody] UserDto userDto)
+        public ActionResult<UserDto> CreateUser([FromBody] UserDto userDto)
         {
-            return BadRequest("User creation not implemented yet.");
+            if (userDto == null)
+                return BadRequest("User data is required.");
+
+            var user = Model.User.FromDto(userDto);
+
+            try
+            {
+                _userRepository.AddUser(user);
+
+                userDto.Id = user.Id;
+                var customProperties = user.GetCustomProperties().ToList();
+                for (int i = 0; i < userDto.CustomProperties.Count; i++)
+                {
+                    userDto.CustomProperties[i].Id = customProperties[i].Id;
+                }
+
+                return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, userDto);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error creating user: {ex.Message}");
+            }
         }
         [HttpPut("{id}")]
-        public ActionResult UpdateUser([FromBody] UserDto userDto)
+        public ActionResult UpdateUser(int id, [FromBody] UserDto userDto)
         {
-            return BadRequest("User update not implemented yet.");
+            if (userDto == null)
+                return BadRequest("User data is required.");
+
+            if (id != userDto.Id)
+                return BadRequest("User ID in URL does not match ID in body.");
+
+            try
+            {
+                var user = Model.User.FromDto(userDto);
+
+                _userRepository.UpdateUser(user);
+
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"User with ID {id} not found.");
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest($"Invalid data: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error updating user: {ex.Message}");
+            }
         }
+
         [HttpDelete("{id}")]
-        public ActionResult DeleteUser([FromBody] UserDto userDto)
+        public ActionResult DeleteUser(int id)
         {
-            return BadRequest("User deletion not implemented yet.");
+            if (id <= 0)
+                return BadRequest("Invalid user ID.");
+
+            try
+            {
+                _userRepository.RemoveUser(id);
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound($"User with ID {id} not found.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error deleting user: {ex.Message}");
+            }
         }
+
     }
 }
