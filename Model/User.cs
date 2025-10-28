@@ -1,4 +1,6 @@
-﻿namespace UserVault.Model
+﻿using UserVault.Dtos;
+
+namespace UserVault.Model
 {
     public enum Sex
     {
@@ -42,17 +44,23 @@
             return string.Join(", ", CustomProperties.Select(p => $"{p.Name}: {p.Value}"));
         }
 
-        public string GetTitle() {
+        public string GetTitle()
+        {
             return this.Sex == Sex.Male ? "Pan" : "Pani";
         }
 
-        public int GetAge() {
+        public int GetAge()
+        {
             int age = DateTime.UtcNow.Year - DateOfBirth.Year;
             if (DateOfBirth < DateTime.UtcNow.AddYears(age))
             {
                 age--;
             }
             return age;
+        }
+        public UserDto ToDto()
+        {
+            return new UserDto(Id, Firstname, Lastname, DateOfBirth, Sex.ToString(), CustomProperties.Select(p => p.ToDto()).ToList());
         }
     }
 }

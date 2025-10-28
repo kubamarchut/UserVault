@@ -1,4 +1,6 @@
-﻿namespace UserVault.Model
+﻿using UserVault.Dtos;
+
+namespace UserVault.Model
 {
     public class CustomProperty
     {
@@ -6,5 +8,10 @@
         public int UserId { get; set; }
         public required string Name { get; set; }
         public required string Value { get; set; }
+
+        public CustomPropertyDto ToDto()
+        {
+            return new CustomPropertyDto(Id, Name, Value);
+        }
     }
 }
