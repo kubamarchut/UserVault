@@ -37,6 +37,11 @@
             return CustomProperties;
         }
 
+        public string ShowCustomProperties()
+        {
+            return string.Join(", ", CustomProperties.Select(p => $"{p.Name}: {p.Value}"));
+        }
+
         public string GetTitle() {
             return this.Sex == Sex.Male ? "Pan" : "Pani";
         }
