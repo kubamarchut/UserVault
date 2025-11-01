@@ -1,4 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using System.Collections.Generic;
+using System.Data;
 using UserVault.Dtos;
 using UserVault.Model;
 
@@ -33,7 +37,9 @@ namespace UserVault.Controllers
             return Ok(userDto);
         }
         [HttpPost]
-        public ActionResult<UserDto> CreateUser([FromBody] UserDto userDto)
+        [ProducesResponseType(typeof(UserDto), 201)]
+        [ProducesResponseType(400)]
+        public ActionResult<UserDto> CreateUser([FromBody] CreateUpdateUserDto userDto)
         {
             if (userDto == null)
                 return BadRequest("User data is required.");
@@ -44,14 +50,15 @@ namespace UserVault.Controllers
             {
                 _userRepository.AddUser(user);
 
-                userDto.Id = user.Id;
                 var customProperties = user.GetCustomProperties().ToList();
                 for (int i = 0; i < userDto.CustomProperties.Count; i++)
                 {
                     userDto.CustomProperties[i].Id = customProperties[i].Id;
                 }
 
-                return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, userDto);
+                var newUser = _userRepository.GetUserById(user.Id);
+
+                return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, newUser.ToDto());
             }
             catch (Exception ex)
             {
@@ -59,17 +66,17 @@ namespace UserVault.Controllers
             }
         }
         [HttpPut("{id}")]
-        public ActionResult UpdateUser(int id, [FromBody] UserDto userDto)
+        [ProducesResponseType(204)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(404)]
+        public ActionResult UpdateUser(int id, [FromBody] CreateUpdateUserDto userDto)
         {
             if (userDto == null)
                 return BadRequest("User data is required.");
 
-            if (id != userDto.Id)
-                return BadRequest("User ID in URL does not match ID in body.");
-
             try
             {
-                var user = Model.User.FromDto(userDto);
+                var user = Model.User.FromDto(id, userDto);
 
                 _userRepository.UpdateUser(user);
 
@@ -110,5 +117,43 @@ namespace UserVault.Controllers
             }
         }
 
+        [HttpGet("export/xlsx")]
+        public ActionResult ExportUsersToXlsx()
+        {
+            var users = _userRepository.GetAllUsers();
+
+            IWorkbook workbook = new XSSFWorkbook();
+            ISheet sheet = workbook.CreateSheet("User Data");
+
+            IRow headerRow = sheet.CreateRow(0);
+            headerRow.CreateCell(0).SetCellValue("ID");
+            headerRow.CreateCell(1).SetCellValue("Firstname");
+            headerRow.CreateCell(2).SetCellValue("Lastname");
+            headerRow.CreateCell(3).SetCellValue("Title");
+            headerRow.CreateCell(4).SetCellValue("Age");
+
+            int rowNum = 1;
+            foreach (var user in users)
+            {
+                IRow row = sheet.CreateRow(rowNum++);
+
+                row.CreateCell(0).SetCellValue(user.Id);
+                row.CreateCell(1).SetCellValue(user.FirstName);
+                row.CreateCell(2).SetCellValue(user.LastName);
+                row.CreateCell(3).SetCellValue(user.GetTitle());
+                row.CreateCell(4).SetCellValue(user.GetAge());
+            }
+            
+            using (var stream = new MemoryStream())
+            {
+                workbook.Write(stream);
+                var fileContents = stream.ToArray();
+
+                const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"UserData-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx";
+
+                return File(fileContents, contentType, fileName);
+            }
+        }
     }
 }

@@ -5,7 +5,7 @@ namespace UserVault.Model
     public enum Sex
     {
         Male,
-        Female,
+        Female
     }
     public class User
     {
@@ -50,7 +50,7 @@ namespace UserVault.Model
         public int GetAge()
         {
             int age = DateTime.UtcNow.Year - DateOfBirth.Year;
-            if (DateOfBirth < DateTime.UtcNow.AddYears(age))
+            if (DateOfBirth > DateTime.UtcNow.AddYears(-age))
             {
                 age--;
             }
@@ -67,6 +67,52 @@ namespace UserVault.Model
 
             var user = new User(
                 userDto.Id,
+                userDto.Firstname,
+                userDto.Lastname,
+                userDto.DateOfBirth,
+                Enum.TryParse<Sex>(userDto.Sex, true, out var sex) ? sex : throw new ArgumentException("Invalid sex value")
+            );
+
+            if (userDto.CustomProperties != null)
+            {
+                foreach (var propDto in userDto.CustomProperties)
+                {
+                    user.AddCustomProperty(CustomProperty.FromDto(propDto, user.Id));
+                }
+            }
+
+            return user;
+        }
+        public static User FromDto(CreateUpdateUserDto userDto)
+        {
+            if (userDto == null)
+                throw new ArgumentNullException(nameof(userDto));
+
+            var user = new User(
+                0,
+                userDto.Firstname,
+                userDto.Lastname,
+                userDto.DateOfBirth,
+                Enum.TryParse<Sex>(userDto.Sex, true, out var sex) ? sex : throw new ArgumentException("Invalid sex value")
+            );
+
+            if (userDto.CustomProperties != null)
+            {
+                foreach (var propDto in userDto.CustomProperties)
+                {
+                    user.AddCustomProperty(CustomProperty.FromDto(propDto, user.Id));
+                }
+            }
+
+            return user;
+        }
+        public static User FromDto(int userId, CreateUpdateUserDto userDto)
+        {
+            if (userDto == null)
+                throw new ArgumentNullException(nameof(userDto));
+
+            var user = new User(
+                userId,
                 userDto.Firstname,
                 userDto.Lastname,
                 userDto.DateOfBirth,
