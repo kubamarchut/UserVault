@@ -1,0 +1,57 @@
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: ./Dockerfile
+    container_name: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  db:
+    image: mcr.microsoft.com/mssql/server:latest
+    container_name: mssql
+    environment:
+      SA_PASSWORD: "mssqlP@ss"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    networks:
+      - app-network
+    volumes:
+      - ./init:/usr/src/app/init
+      - mssql-data:/var/opt/mssql
+    command: 
+      - /bin/bash
+      - -c
+      - |
+        /opt/mssql/bin/sqlservr &
+        /usr/src/app/init/init-db.sh &
+        wait
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"mssqlP@ss\" -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mssql-data:

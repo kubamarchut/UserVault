@@ -60,10 +60,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import { api } from 'boot/axios'
 import type { UserDto } from 'src/types/user'
 import UserFormModal from 'src/pages/UserFormModal.vue'
 import { useQuasar } from 'quasar'
+import { isAxiosError } from 'axios'
 
 const $q = useQuasar()
 
@@ -90,7 +91,7 @@ function formatDate(date: Date | string) {
 // Fetch users from backend
 async function fetchUsers() {
   try {
-    const res = await axios.get<UserDto[]>('https://localhost:7130/api/users')
+    const res = await api.get<UserDto[]>('/users')
     users.value = res.data.map(u => ({ ...u, dateOfBirth: new Date(u.dateOfBirth) }))
   } catch (err) {
     console.error(err)
@@ -104,23 +105,22 @@ function openModal(user: UserDto | null = null) {
 }
 
 async function downloadReport() {
-  const endpoint = 'https://localhost:7130/api/Users/export/xlsx';
+  const endpoint = '/Users/export/xlsx';
 
   try {
-    const response = await fetch(endpoint);
+    const response = await api.get(endpoint, {
+      responseType: 'blob'
+    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const blob = await response.blob();
+    const blob = response.data;
     
-    const contentDisposition = response.headers.get('Content-Disposition');
+    const contentDisposition = response.headers['content-disposition'];
     let filename = 'UserData.xlsx';
 
     if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="?(.+?)"?(;|$)/i);
+      const filenameMatch = contentDisposition.match(/filename\*?=['"]?([^;"]+)/i);
       if (filenameMatch && filenameMatch[1]) {
-        filename = filenameMatch[1];
+        filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
       }
     }
 
@@ -136,12 +136,37 @@ async function downloadReport() {
     a.remove();
 
     console.log('Report downloaded successfully.');
+    $q.notify({
+      type: 'positive',
+      message: 'Report downloaded successfully.'
+    });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error downloading report:', error);
+
+    let status = 'N/A';
+    let message = 'Failed to download report.';
+
+    if (isAxiosError(error)) {
+      if (error.response) {
+        
+        status = error.response.status.toString();
+        message = `Failed to download report. Status: ${status}`;
+      
+      } else if (error.request) {
+        status = 'Network Error';
+        message = 'Failed to connect to the API server.';
+      
+      } else {
+        message = `Request setup error: ${error.message}`;
+      }
+    } else if (error instanceof Error) {
+      message = error.message;
+    }
+
     $q.notify({
       type: 'negative',
-      message: 'Failed to download report.'
+      message: message
     });
   }
 }
@@ -172,7 +197,7 @@ function confirmDelete(user: UserDto) {
 
 async function deleteUser(id: number) {
   try {
-    await axios.delete(`https://localhost:7130/api/users/${id}`)
+    await api.delete(`/users/${id}`)
     $q.notify({
       type: 'positive',
       message: 'User deleted successfully.'

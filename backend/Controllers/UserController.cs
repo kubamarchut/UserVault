@@ -129,8 +129,10 @@ namespace UserVault.Controllers
             headerRow.CreateCell(0).SetCellValue("ID");
             headerRow.CreateCell(1).SetCellValue("Firstname");
             headerRow.CreateCell(2).SetCellValue("Lastname");
-            headerRow.CreateCell(3).SetCellValue("Title");
-            headerRow.CreateCell(4).SetCellValue("Age");
+            headerRow.CreateCell(3).SetCellValue("Date of birth");
+            headerRow.CreateCell(4).SetCellValue("Sex");
+            headerRow.CreateCell(5).SetCellValue("Title");
+            headerRow.CreateCell(6).SetCellValue("Age");
 
             int rowNum = 1;
             foreach (var user in users)
@@ -140,20 +142,27 @@ namespace UserVault.Controllers
                 row.CreateCell(0).SetCellValue(user.Id);
                 row.CreateCell(1).SetCellValue(user.FirstName);
                 row.CreateCell(2).SetCellValue(user.LastName);
-                row.CreateCell(3).SetCellValue(user.GetTitle());
-                row.CreateCell(4).SetCellValue(user.GetAge());
+                row.CreateCell(3).SetCellValue($"{user.DateOfBirth:dd.MM.yyyy}");
+                row.CreateCell(4).SetCellValue(user.Sex.ToString());
+                row.CreateCell(5).SetCellValue(user.GetTitle());
+                row.CreateCell(6).SetCellValue(user.GetAge());
             }
-            
+
             using (var stream = new MemoryStream())
             {
                 workbook.Write(stream);
                 var fileContents = stream.ToArray();
 
                 const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-                var fileName = $"UserData-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx";
+                var fileName = $"{DateTime.UtcNow:dd.MM.yyyy-HH:mm:ss}.xlsx";
 
                 return File(fileContents, contentType, fileName);
             }
+        }
+        [HttpGet("conf")]
+        public ActionResult testcon()
+        {
+            return Ok("It works!");
         }
     }
 }

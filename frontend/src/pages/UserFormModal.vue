@@ -106,7 +106,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import axios from 'axios'
+import { api } from 'boot/axios'
 import type { CreateUpdateUserDto, UserDto } from 'src/types/user'
 
 interface CustomProperty {
@@ -195,9 +195,9 @@ async function save() {
 
   try {
     if (isEdit.value && props.user?.id) {
-      await axios.put(`https://localhost:7130/api/users/${props.user.id}`, form.value)
+      await api.put(`/users/${props.user.id}`, form.value)
     } else {
-      await axios.post('https://localhost:7130/api/users', form.value)
+      await api.post('/users', form.value)
     }
 
     emit('saved')

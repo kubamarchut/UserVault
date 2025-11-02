@@ -2,7 +2,7 @@ using UserVault.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-string connectionString = "Server=localhost;Database=UserVaultDb;User Id=sa;Password=mssqlP@ss;TrustServerCertificate=True;";
+string connectionString = $"Server={(builder.Environment.IsDevelopment() ? "localhost": "db")};Database=UserVaultDb;User Id=sa;Password=mssqlP@ss;TrustServerCertificate=True;";
 
 builder.Services.AddSingleton<UserRepository>(new UserRepository(connectionString));
 
