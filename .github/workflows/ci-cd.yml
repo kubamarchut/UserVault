@@ -1,39 +1,53 @@
-name: Fullstack CI/CD (Quasar, .NET, Docker, Deploy)
+name: Build → Push images → Deploy (docker hub + self-hosted)
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
-  # Paths
-  QUASAR_ROOT: frontend 
+  QUASAR_ROOT: frontend
   DOTNET_PROJECT_PATH: backend
-  # Versions
   NODE_VERSION: '20.x'
-  DOTNET_VERSION: '8.0.x' 
-  
-  # Docker Variables
-  FULL_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
-  CONTAINER_NAME: user-vault-app
+  DOTNET_VERSION: '8.0'
 
 jobs:
-  build:
-    name: Build & Package App
+  build_and_push_images:
+    name: Build frontend & backend, build images and push
     runs-on: ubuntu-latest
+    outputs:
+      frontend_image: ${{ steps.set_images.outputs.frontend_image }}
+      backend_image: ${{ steps.set_images.outputs.backend_image }}
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repo
         uses: actions/checkout@v4
-      
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
+
+      - id: set_images
+        name: Set image names (lowercase) & tags
+        run: |
+          BASE="$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')"
+          FRONT="${BASE}-frontend:${{ github.sha }}"
+          BACK="${BASE}-backend:${{ github.sha }}"
+          echo "frontend_image=$FRONT" >> $GITHUB_OUTPUT
+          echo "backend_image=$BACK" >> $GITHUB_OUTPUT
+          # also export simple names for latest tag usage in later steps (not strictly required)
+          echo "frontend_repo=${BASE}-frontend" >> $GITHUB_OUTPUT
+          echo "backend_repo=${BASE}-backend" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # ----------------- FRONTEND: build Quasar SPA -----------------
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Cache Node Modules
+      - name: Cache frontend node_modules
         id: cache-npm
         uses: actions/cache@v4
         with:
@@ -41,119 +55,167 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', env.QUASAR_ROOT)) }}
           restore-keys: |
             ${{ runner.os }}-node-
-    
-      - name: Install Quasar Dependencies
+
+      - name: Install frontend deps (if cache miss)
         if: steps.cache-npm.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: ${{ env.QUASAR_ROOT }}
-  
+
       - name: Install Quasar CLI
         run: npm install -g @quasar/cli
-  
-      - name: Build Quasar App and Copy to .NET
-        run: quasar build -m spa --output-path ../${{ env.DOTNET_PROJECT_PATH }}/wwwroot/dist
+
+      - name: Build Quasar SPA (dist)
+        run: quasar build -m spa --output-path dist
         working-directory: ${{ env.QUASAR_ROOT }}
 
-      - name: Set up .NET SDK ${{ env.DOTNET_VERSION }}
+      - name: Prepare frontend image context
+        run: |
+          rm -rf /tmp/frontend-image
+          mkdir -p /tmp/frontend-image/dist
+          cp -r ${{ env.QUASAR_ROOT }}/dist/* /tmp/frontend-image/dist/
+          # create a simple nginx Dockerfile that serves dist
+          cat > /tmp/frontend-image/Dockerfile <<'EOF'
+          FROM nginx:stable-alpine
+          RUN rm -rf /usr/share/nginx/html/*
+          COPY dist/ /usr/share/nginx/html/
+          # Optional: enable SPA fallback (uncomment below if you want history fallback)
+          # RUN apk add --no-cache bash
+          # COPY nginx.conf /etc/nginx/conf.d/default.conf
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
+
+      # ----------------- BACKEND: dotnet publish -----------------
+      - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore, Build, and Publish .NET App
+      - name: Restore and publish .NET app
         run: |
-          dotnet restore *.sln
-          dotnet build *.sln --configuration Release --no-restore
-          # Publishing the solution will automatically find the executable project (usually the web project).
-          dotnet publish *.sln --configuration Release --no-build --output ${{ github.workspace }}/deployment-package
-        working-directory: ${{ env.DOTNET_PROJECT_PATH }}
-      
-      - name: Upload Deployment Package Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-package
-          path: ${{ github.workspace }}/deployment-package
-          retention-days: 7
+          cd ${{ env.DOTNET_PROJECT_PATH }}
+          dotnet restore
+          dotnet publish -c Release -o publish
+        working-directory: ${{ github.workspace }}
 
-
-  docker_build_and_push:
-    name: Build & Push Docker Image
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Download Deployment Package
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-package
-          path: deployment-package
-          
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Normalize image name to lowercase
-        id: lowercasename
+      - name: Prepare backend image context
         run: |
-          IMAGE_NAME=$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          echo "FULL_IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-      
-      - name: Set up Docker Buildx
+          rm -rf /tmp/backend-image
+          mkdir -p /tmp/backend-image/app
+          cp -r ${{ env.DOTNET_PROJECT_PATH }}/publish/* /tmp/backend-image/app/
+          # simple runtime Dockerfile for ASP.NET (adjust exposed port if needed)
+          cat > /tmp/backend-image/Dockerfile <<'EOF'
+          FROM mcr.microsoft.com/dotnet/aspnet:8.0
+          WORKDIR /app
+          COPY app/ .
+          ENV ASPNETCORE_URLS=http://+:8080
+          EXPOSE 8080
+          ENTRYPOINT ["dotnet", "Your.Web.App.dll"]
+          EOF
+          # Note: replace Your.Web.App.dll with your actual DLL filename or modify Dockerfile in repo for a persistent version.
+
+      - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Docker Image
+      - name: Build & push frontend image (sha & latest)
         uses: docker/build-push-action@v5
         with:
-          context: ${{ env.DOTNET_PROJECT_PATH }}
-          file: ${{ env.DOTNET_PROJECT_PATH }}/Dockerfile
+          context: /tmp/frontend-image
+          file: /tmp/frontend-image/Dockerfile
           push: true
           tags: |
-            ${{ env.FULL_IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.FULL_IMAGE_NAME }}:latest
+            ${{ steps.set_images.outputs.frontend_image }}
+            ${{ steps.set_images.outputs.frontend_repo }}:latest
 
+      - name: Build & push backend image (sha & latest)
+        uses: docker/build-push-action@v5
+        with:
+          context: /tmp/backend-image
+          file: /tmp/backend-image/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.set_images.outputs.backend_image }}
+            ${{ steps.set_images.outputs.backend_repo }}:latest
 
   deploy_to_self_hosted:
-    name: Deploy via Self-Hosted Runner
-    runs-on: [self-hosted, linux] 
-    needs: docker_build_and_push
+    name: Pull fresh images on self-hosted and run compose
+    runs-on: [self-hosted, linux]
+    needs: build_and_push_images
     environment: Production
 
     steps:
-      - name: Login to Docker Hub (on self-hosted runner)
+      - name: Checkout (for docker-compose.yml if you keep one in repo)
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub (self-hosted)
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          
-      - name: Normalize image name to lowercase
-        id: lowercasename
-        run: |
-          IMAGE_NAME=$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          echo "FULL_IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          
-      - name: Pull Latest Docker Image
-        run: |
-          docker pull ${{ env.FULL_IMAGE_NAME }}:latest
 
-      - name: Stop and Remove Old Container
+      - name: Create image-based docker-compose.deploy.yml
         run: |
-          # Use '|| true' to prevent the step from failing if the container doesn't exist
-          if [ "$(docker ps -a -q -f name=${{ env.CONTAINER_NAME }})" ]; then
-            echo "Stopping and removing existing container..."
-            docker stop ${{ env.CONTAINER_NAME }} || true
-            docker rm ${{ env.CONTAINER_NAME }} || true
-          fi
+          FRONT="${{ needs.build_and_push_images.outputs.frontend_image }}"
+          BACK="${{ needs.build_and_push_images.outputs.backend_image }}"
+          cat > docker-compose.deploy.yml <<EOF
+          version: '3.8'
+          services:
+            frontend:
+              image: ${FRONT}
+              container_name: frontend
+              ports:
+                - "80:80"
+              depends_on:
+                - backend
+              networks:
+                - app-network
 
-      - name: Run New Container
+            backend:
+              image: ${BACK}
+              container_name: backend
+              ports:
+                - "8080:8080"
+              depends_on:
+                db:
+                  condition: service_healthy
+              networks:
+                - app-network
+
+            db:
+              image: mcr.microsoft.com/mssql/server:latest
+              container_name: mssql
+              environment:
+                SA_PASSWORD: "${{ secrets.MSSQL_SA_PASSWORD }}"
+                ACCEPT_EULA: "Y"
+              ports:
+                - "1433:1433"
+              volumes:
+                - mssql-data:/var/opt/mssql
+              healthcheck:
+                test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"${{ secrets.MSSQL_SA_PASSWORD }}\" -Q \"SELECT 1\" || exit 1"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+              networks:
+                - app-network
+
+          networks:
+            app-network:
+              driver: bridge
+
+          volumes:
+            mssql-data:
+          EOF
+
+      - name: Show docker / compose versions (debug)
         run: |
-          echo "Starting new container using ${{ env.FULL_IMAGE_NAME }}:latest"
-          # -d runs in detached mode, -p 3003:8080 maps external port 80 to container port 3003
-          docker run -d \
-            --name ${{ env.CONTAINER_NAME }} \
-            -p 3003:8080 \
-            ${{ env.FULL_IMAGE_NAME }}:latest
-          echo "Deployment successful."
+          docker --version || true
+          docker compose version || docker-compose --version || true
+
+      - name: Stop existing stack (if any)
+        run: docker compose -f docker-compose.deploy.yml down --remove-orphans || true
+
+      - name: Pull images & start stack
+        run: |
+          docker compose -f docker-compose.deploy.yml pull || true
+          docker compose -f docker-compose.deploy.yml up -d --remove-orphans
