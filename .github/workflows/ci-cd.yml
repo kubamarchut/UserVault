@@ -10,7 +10,7 @@ on:
 env:
   # Paths
   QUASAR_ROOT: frontend 
-  DOTNET_ROOT: backend
+  DOTNET_PROJECT_PATH: backend
   # Versions
   NODE_VERSION: '20.x'
   DOTNET_VERSION: '8.0.x' 
@@ -51,7 +51,7 @@ jobs:
         run: npm install -g @quasar/cli
   
       - name: Build Quasar App and Copy to .NET
-        run: quasar build -m spa --output-path ../${{ env.DOTNET_ROOT }}/wwwroot/dist
+        run: quasar build -m spa --output-path ../${{ env.DOTNET_PROJECT_PATH }}/wwwroot/dist
         working-directory: ${{ env.QUASAR_ROOT }}
 
       - name: Set up .NET SDK ${{ env.DOTNET_VERSION }}
@@ -65,7 +65,7 @@ jobs:
           dotnet build *.sln --configuration Release --no-restore
           # Publishing the solution will automatically find the executable project (usually the web project).
           dotnet publish *.sln --configuration Release --no-build --output ${{ github.workspace }}/deployment-package
-        working-directory: ${{ env.DOTNET_ROOT }}
+        working-directory: ${{ env.DOTNET_PROJECT_PATH }}
       
       - name: Upload Deployment Package Artifact
         uses: actions/upload-artifact@v4
