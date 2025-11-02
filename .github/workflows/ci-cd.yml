@@ -108,8 +108,8 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: . 
-          file: ${{ env.DOTNET_PROJECT_PATH }}/Dockerfile
+          context: ${{ env.DOTNET_PROJECT_PATH }}
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ env.FULL_IMAGE_NAME }}:${{ github.sha }}
