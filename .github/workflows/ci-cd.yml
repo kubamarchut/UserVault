@@ -13,30 +13,12 @@ env:
 
 jobs:
   build_and_push_images:
-    name: Build frontend & backend, build images and push
+    name: Build frontend & backend, push to Docker Hub
     runs-on: ubuntu-latest
-    outputs:
-      frontend_image: ${{ steps.set_images.outputs.frontend_image }}
-      backend_image: ${{ steps.set_images.outputs.backend_image }}
-      frontend_repo: ${{ steps.set_images.outputs.frontend_repo }}
-      backend_repo: ${{ steps.set_images.outputs.backend_repo }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
-      - id: set_images
-        name: Set image names (lowercase) & tags
-        run: |
-          BASE="$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')"
-          FRONT_REPO="${BASE}-frontend"
-          BACK_REPO="${BASE}-backend"
-          FRONT_TAG="${FRONT_REPO}:${{ github.sha }}"
-          BACK_TAG="${BACK_REPO}:${{ github.sha }}"
-          echo "frontend_repo=${FRONT_REPO}" >> $GITHUB_OUTPUT
-          echo "backend_repo=${BACK_REPO}" >> $GITHUB_OUTPUT
-          echo "frontend_image=${FRONT_TAG}" >> $GITHUB_OUTPUT
-          echo "backend_image=${BACK_TAG}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -44,96 +26,37 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # ---------- FRONTEND: build Quasar SPA ----------
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache frontend node_modules
-        id: cache-npm
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QUASAR_ROOT }}/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', env.QUASAR_ROOT)) }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install frontend deps (if cache miss)
-        if: steps.cache-npm.outputs.cache-hit != 'true'
-        run: npm ci
-        working-directory: ${{ env.QUASAR_ROOT }}
-
-      - name: Install Quasar CLI
-        run: npm install -g @quasar/cli
-
-      - name: Build Quasar SPA (dist)
-        run: quasar build -m spa --output-path dist
-        working-directory: ${{ env.QUASAR_ROOT }}
-
-      - name: Prepare frontend image context
+      - name: Normalize repository name
+        id: normalize
         run: |
-          rm -rf /tmp/frontend-image
-          mkdir -p /tmp/frontend-image/dist
-          cp -r ${{ env.QUASAR_ROOT }}/dist/* /tmp/frontend-image/dist/
-          cat > /tmp/frontend-image/Dockerfile <<'EOF'
-          FROM nginx:stable-alpine
-          RUN rm -rf /usr/share/nginx/html/*
-          COPY dist/ /usr/share/nginx/html/
-          EXPOSE 80
-          CMD ["nginx", "-g", "daemon off;"]
-          EOF
+          BASE=$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          echo "base_repo=$BASE" >> $GITHUB_OUTPUT
+          echo "frontend_image=${BASE}-frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "backend_image=${BASE}-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "DEBUG frontend: ${BASE}-frontend:${{ github.sha }}"
+          echo "DEBUG backend:  ${BASE}-backend:${{ github.sha }}"
 
-      # ---------- BACKEND: dotnet publish ----------
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore and publish .NET app
-        run: |
-          cd ${{ env.DOTNET_PROJECT_PATH }}
-          dotnet restore
-          dotnet publish -c Release -o publish
-        working-directory: ${{ github.workspace }}
-
-      - name: Prepare backend image context
-        run: |
-          if [ ! -d /tmp/backend-image ]; then rm -rf /tmp/backend-image; fi
-          mkdir -p /tmp/backend-image/app
-          cp -r ${{ env.DOTNET_PROJECT_PATH }}/publish/* /tmp/backend-image/app/
-          cat > /tmp/backend-image/Dockerfile <<'EOF'
-          FROM mcr.microsoft.com/dotnet/aspnet:8.0
-          WORKDIR /app
-          COPY app/ .
-          ENV ASPNETCORE_URLS=http://+:8080
-          EXPOSE 8080
-          ENTRYPOINT ["dotnet", "Your.Web.App.dll"]
-          EOF
-          # NOTE: Replace Your.Web.App.dll with your actual DLL or commit a backend/Dockerfile and adjust workflow to use it.
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & push frontend image (sha & latest)
+      # ---------- Build & push frontend image ----------
+      - name: Build & push frontend image
         uses: docker/build-push-action@v5
         with:
-          context: /tmp/frontend-image
-          file: /tmp/frontend-image/Dockerfile
+          context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ steps.set_images.outputs.frontend_image }}
-            ${{ steps.set_images.outputs.frontend_repo }}:latest
+            ${{ steps.normalize.outputs.base_repo }}-frontend:${{ github.sha }}
+            ${{ steps.normalize.outputs.base_repo }}-frontend:latest
 
-      - name: Build & push backend image (sha & latest)
+      # ---------- Build & push backend image ----------
+      - name: Build & push backend image
         uses: docker/build-push-action@v5
         with:
-          context: /tmp/backend-image
-          file: /tmp/backend-image/Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ steps.set_images.outputs.backend_image }}
-            ${{ steps.set_images.outputs.backend_repo }}:latest
+            ${{ steps.normalize.outputs.base_repo }}-backend:${{ github.sha }}
+            ${{ steps.normalize.outputs.base_repo }}-backend:latest
 
   deploy_to_self_hosted:
     name: Pull fresh images on self-hosted and run compose
