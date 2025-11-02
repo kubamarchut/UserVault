@@ -140,30 +140,45 @@ jobs:
     runs-on: [self-hosted, linux]
     needs: build_and_push_images
     environment: Production
-
+  
     steps:
       - name: Checkout (for docker-compose.yml if you keep it in repo)
         uses: actions/checkout@v4
-
+  
       - name: Log in to Docker Hub (self-hosted)
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Create image-based docker-compose.deploy.yml (trim outputs & quote images)
+  
+      - name: Compute image names (recompute here to avoid empty job outputs)
+        id: compute_images
         run: |
-          # read outputs (these are expanded by GH before the run starts)
-          FRONT_RAW="${{ needs.build_and_push_images.outputs.frontend_image }}"
-          BACK_RAW="${{ needs.build_and_push_images.outputs.backend_image }}"
-
-          # Trim whitespace/newlines to avoid YAML mis-parsing
-          FRONT="$(echo "$FRONT_RAW" | tr -d '\r\n' | xargs)"
-          BACK="$(echo "$BACK_RAW" | tr -d '\r\n' | xargs)"
-
-          echo "DEBUG: frontend image -> '$FRONT'"
-          echo "DEBUG: backend  image -> '$BACK'"
-
+          # ensure secret exists
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
+            echo "ERROR: DOCKER_USERNAME secret is empty or missing"
+            exit 1
+          fi
+  
+          BASE="$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')"
+          FRONT="${BASE}-frontend:${{ github.sha }}"
+          BACK="${BASE}-backend:${{ github.sha }}"
+  
+          # trim whitespace/newlines just in case
+          FRONT="$(echo -n "$FRONT" | tr -d '\r\n' | xargs || true)"
+          BACK="$(echo -n "$BACK" | tr -d '\r\n' | xargs || true)"
+  
+          echo "frontend_image=$FRONT" >> $GITHUB_OUTPUT
+          echo "backend_image=$BACK"  >> $GITHUB_OUTPUT
+  
+          echo "DEBUG: computed frontend image -> '$FRONT'"
+          echo "DEBUG: computed backend  image -> '$BACK'"
+  
+      - name: Create image-based docker-compose.deploy.yml (quote image values)
+        run: |
+          FRONT="${{ steps.compute_images.outputs.frontend_image }}"
+          BACK="${{ steps.compute_images.outputs.backend_image }}"
+  
           cat > docker-compose.deploy.yml <<EOF
           version: '3.8'
           services:
@@ -176,7 +191,7 @@ jobs:
                 - backend
               networks:
                 - app-network
-
+  
             backend:
               image: "${BACK}"
               container_name: backend
@@ -187,7 +202,7 @@ jobs:
                   condition: service_healthy
               networks:
                 - app-network
-
+  
             db:
               image: mcr.microsoft.com/mssql/server:latest
               container_name: mssql
@@ -205,29 +220,29 @@ jobs:
                 retries: 5
               networks:
                 - app-network
-
+  
           networks:
             app-network:
               driver: bridge
-
+  
           volumes:
             mssql-data:
           EOF
-
+  
       - name: Show generated compose file (debug)
         run: |
           echo "---- docker-compose.deploy.yml ----"
           sed -n '1,200p' docker-compose.deploy.yml || true
           echo "-----------------------------------"
-
+  
       - name: Show docker / compose versions (debug)
         run: |
           docker --version || true
           docker compose version || docker-compose --version || true
-
+  
       - name: Stop existing stack (if any)
         run: docker compose -f docker-compose.deploy.yml down --remove-orphans || true
-
+  
       - name: Pull images & start stack
         run: |
           docker compose -f docker-compose.deploy.yml pull || true
