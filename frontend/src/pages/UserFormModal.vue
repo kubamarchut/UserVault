@@ -2,8 +2,14 @@
   <q-dialog
     :model-value="modelValue"
     @update:model-value="emit('update:modelValue', $event)"
+    :maximized="$q.screen.lt.sm"
   >
-    <q-card style="min-width:500px">
+    <q-card :style="{
+        minWidth: $q.screen.lt.sm ? '100%' : '500px',
+        width: $q.screen.lt.sm ? '100%' : 'auto',
+        maxHeight: '90vh',
+        overflowY: 'auto'
+      }">
       <q-card-section>
         <div class="text-h6">{{ isEdit ? 'Edit User' : 'Add User' }}</div>
       </q-card-section>
