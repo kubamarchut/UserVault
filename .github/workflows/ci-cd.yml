@@ -18,6 +18,8 @@ jobs:
     outputs:
       frontend_image: ${{ steps.set_images.outputs.frontend_image }}
       backend_image: ${{ steps.set_images.outputs.backend_image }}
+      frontend_repo: ${{ steps.set_images.outputs.frontend_repo }}
+      backend_repo: ${{ steps.set_images.outputs.backend_repo }}
 
     steps:
       - name: Checkout repo
@@ -27,13 +29,14 @@ jobs:
         name: Set image names (lowercase) & tags
         run: |
           BASE="$(echo "${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')"
-          FRONT="${BASE}-frontend:${{ github.sha }}"
-          BACK="${BASE}-backend:${{ github.sha }}"
-          echo "frontend_image=$FRONT" >> $GITHUB_OUTPUT
-          echo "backend_image=$BACK" >> $GITHUB_OUTPUT
-          # also export simple names for latest tag usage in later steps (not strictly required)
-          echo "frontend_repo=${BASE}-frontend" >> $GITHUB_OUTPUT
-          echo "backend_repo=${BASE}-backend" >> $GITHUB_OUTPUT
+          FRONT_REPO="${BASE}-frontend"
+          BACK_REPO="${BASE}-backend"
+          FRONT_TAG="${FRONT_REPO}:${{ github.sha }}"
+          BACK_TAG="${BACK_REPO}:${{ github.sha }}"
+          echo "frontend_repo=${FRONT_REPO}" >> $GITHUB_OUTPUT
+          echo "backend_repo=${BACK_REPO}" >> $GITHUB_OUTPUT
+          echo "frontend_image=${FRONT_TAG}" >> $GITHUB_OUTPUT
+          echo "backend_image=${BACK_TAG}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -41,7 +44,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # ----------------- FRONTEND: build Quasar SPA -----------------
+      # ---------- FRONTEND: build Quasar SPA ----------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -73,19 +76,15 @@ jobs:
           rm -rf /tmp/frontend-image
           mkdir -p /tmp/frontend-image/dist
           cp -r ${{ env.QUASAR_ROOT }}/dist/* /tmp/frontend-image/dist/
-          # create a simple nginx Dockerfile that serves dist
           cat > /tmp/frontend-image/Dockerfile <<'EOF'
           FROM nginx:stable-alpine
           RUN rm -rf /usr/share/nginx/html/*
           COPY dist/ /usr/share/nginx/html/
-          # Optional: enable SPA fallback (uncomment below if you want history fallback)
-          # RUN apk add --no-cache bash
-          # COPY nginx.conf /etc/nginx/conf.d/default.conf
           EXPOSE 80
           CMD ["nginx", "-g", "daemon off;"]
           EOF
 
-      # ----------------- BACKEND: dotnet publish -----------------
+      # ---------- BACKEND: dotnet publish ----------
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -100,10 +99,9 @@ jobs:
 
       - name: Prepare backend image context
         run: |
-          rm -rf /tmp/backend-image
+          if [ ! -d /tmp/backend-image ]; then rm -rf /tmp/backend-image; fi
           mkdir -p /tmp/backend-image/app
           cp -r ${{ env.DOTNET_PROJECT_PATH }}/publish/* /tmp/backend-image/app/
-          # simple runtime Dockerfile for ASP.NET (adjust exposed port if needed)
           cat > /tmp/backend-image/Dockerfile <<'EOF'
           FROM mcr.microsoft.com/dotnet/aspnet:8.0
           WORKDIR /app
@@ -112,9 +110,9 @@ jobs:
           EXPOSE 8080
           ENTRYPOINT ["dotnet", "Your.Web.App.dll"]
           EOF
-          # Note: replace Your.Web.App.dll with your actual DLL filename or modify Dockerfile in repo for a persistent version.
+          # NOTE: Replace Your.Web.App.dll with your actual DLL or commit a backend/Dockerfile and adjust workflow to use it.
 
-      - name: Set up Docker buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Build & push frontend image (sha & latest)
@@ -144,7 +142,7 @@ jobs:
     environment: Production
 
     steps:
-      - name: Checkout (for docker-compose.yml if you keep one in repo)
+      - name: Checkout (for docker-compose.yml if you keep it in repo)
         uses: actions/checkout@v4
 
       - name: Log in to Docker Hub (self-hosted)
@@ -153,15 +151,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Create image-based docker-compose.deploy.yml
+      - name: Create image-based docker-compose.deploy.yml (trim outputs & quote images)
         run: |
-          FRONT="${{ needs.build_and_push_images.outputs.frontend_image }}"
-          BACK="${{ needs.build_and_push_images.outputs.backend_image }}"
+          # read outputs (these are expanded by GH before the run starts)
+          FRONT_RAW="${{ needs.build_and_push_images.outputs.frontend_image }}"
+          BACK_RAW="${{ needs.build_and_push_images.outputs.backend_image }}"
+
+          # Trim whitespace/newlines to avoid YAML mis-parsing
+          FRONT="$(echo "$FRONT_RAW" | tr -d '\r\n' | xargs)"
+          BACK="$(echo "$BACK_RAW" | tr -d '\r\n' | xargs)"
+
+          echo "DEBUG: frontend image -> '$FRONT'"
+          echo "DEBUG: backend  image -> '$BACK'"
+
           cat > docker-compose.deploy.yml <<EOF
           version: '3.8'
           services:
             frontend:
-              image: ${FRONT}
+              image: "${FRONT}"
               container_name: frontend
               ports:
                 - "80:80"
@@ -171,7 +178,7 @@ jobs:
                 - app-network
 
             backend:
-              image: ${BACK}
+              image: "${BACK}"
               container_name: backend
               ports:
                 - "8080:8080"
@@ -206,6 +213,12 @@ jobs:
           volumes:
             mssql-data:
           EOF
+
+      - name: Show generated compose file (debug)
+        run: |
+          echo "---- docker-compose.deploy.yml ----"
+          sed -n '1,200p' docker-compose.deploy.yml || true
+          echo "-----------------------------------"
 
       - name: Show docker / compose versions (debug)
         run: |
