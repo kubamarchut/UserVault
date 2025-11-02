@@ -61,9 +61,10 @@ jobs:
 
       - name: Restore, Build, and Publish .NET App
         run: |
-          dotnet restore
-          dotnet build --configuration Release --no-restore
-          dotnet publish --configuration Release --no-build --output ${{ github.workspace }}/deployment-package
+          dotnet restore *.sln
+          dotnet build *.sln --configuration Release --no-restore
+          # Publishing the solution will automatically find the executable project (usually the web project).
+          dotnet publish *.sln --configuration Release --no-build --output ${{ github.workspace }}/deployment-package
         working-directory: ${{ env.DOTNET_ROOT }}
       
       - name: Upload Deployment Package Artifact
