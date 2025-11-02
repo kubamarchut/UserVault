@@ -125,7 +125,6 @@ jobs:
                   condition: service_healthy
               networks:
                 - app-network
-  
             db:
               image: mcr.microsoft.com/mssql/server:latest
               container_name: mssql
@@ -134,6 +133,8 @@ jobs:
                 ACCEPT_EULA: "Y"
               ports:
                 - "1433:1433"
+              networks:
+                - app-network
               volumes:
                 - ./init:/usr/src/app/init
                 - mssql-data:/var/opt/mssql
@@ -149,8 +150,6 @@ jobs:
                 interval: 10s
                 timeout: 5s
                 retries: 5
-              networks:
-                - app-network
   
           networks:
             app-network:
