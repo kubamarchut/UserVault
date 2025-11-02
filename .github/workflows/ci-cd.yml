@@ -186,7 +186,7 @@ jobs:
               image: "${FRONT}"
               container_name: frontend
               ports:
-                - "80:80"
+                - "3003:80"
               depends_on:
                 - backend
               networks:
