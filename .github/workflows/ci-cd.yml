@@ -16,7 +16,7 @@ env:
   DOTNET_VERSION: '8.0.x' 
   
   # Docker Variables
-  FULL_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}
+  FULL_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/${{ toLower(github.event.repository.name) }}
   CONTAINER_NAME: user-vault-app
 
 jobs:
