@@ -41,12 +41,15 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles(format('{0}/package-lock.json', env.QUASAR_ROOT)) }}
           restore-keys: |
             ${{ runner.os }}-node-
-
+    
       - name: Install Quasar Dependencies
         if: steps.cache-npm.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: ${{ env.QUASAR_ROOT }}
-
+  
+      - name: Install Quasar CLI
+        run: npm install -g @quasar/cli
+  
       - name: Build Quasar App and Copy to .NET
         run: quasar build -m spa --output-path ../${{ env.DOTNET_ROOT }}/wwwroot/dist
         working-directory: ${{ env.QUASAR_ROOT }}
