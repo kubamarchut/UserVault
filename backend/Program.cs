@@ -31,7 +31,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/app/v1/app.json", "UserVault API v1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "UserVault API v1");
         c.RoutePrefix = string.Empty;
     }
     );
