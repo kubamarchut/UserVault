@@ -41,7 +41,7 @@ namespace UserVault.Controllers
             return Ok(userDto);
         }
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        //[ValidateAntiForgeryToken]
         [ProducesResponseType(typeof(UserDto), 201)]
         [ProducesResponseType(400)]
         public ActionResult<UserDto> CreateUser([FromBody] CreateUpdateUserDto userDto)
@@ -71,7 +71,7 @@ namespace UserVault.Controllers
             }
         }
         [HttpPut("{id}")]
-        [ValidateAntiForgeryToken]
+        //[ValidateAntiForgeryToken]
         [ProducesResponseType(204)]
         [ProducesResponseType(400)]
         [ProducesResponseType(404)]
@@ -103,7 +103,7 @@ namespace UserVault.Controllers
         }
 
         [HttpDelete("{id}")]
-        [ValidateAntiForgeryToken]
+        //[ValidateAntiForgeryToken]
         public ActionResult DeleteUser(int id)
         {
             if (id <= 0)

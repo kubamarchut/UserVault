@@ -66,6 +66,19 @@ import UserFormModal from 'src/pages/UserFormModal.vue'
 import { useQuasar } from 'quasar'
 import { isAxiosError } from 'axios'
 
+
+ async function testCSRF(){
+  try{
+  const response = await api.get('/users/csrf-token')
+    const token = response.data.token
+
+    api.defaults.headers.common['X-XSRF-TOKEN'] = token
+  }
+  catch(error){
+    console.error(error)
+  }
+ }
+
 const $q = useQuasar()
 
 const users = ref<UserDto[]>([])
@@ -212,5 +225,9 @@ async function deleteUser(id: number) {
   }
 }
 
-onMounted(fetchUsers)
+onMounted(async () => {
+  await testCSRF()
+  await fetchUsers()
+})
+
 </script>
