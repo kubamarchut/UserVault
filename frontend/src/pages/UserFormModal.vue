@@ -74,11 +74,17 @@
           <div v-for="(prop, index) in customProperties" :key="index" class="row q-gutter-sm items-center q-mb-sm">
               <q-input v-model="prop.name" label="Name" outlined dense class="col"
                 hide-bottom-space
-                :rules="[val => !!val || 'Property name is required']"
+                :rules="[
+                  val => !!val || 'Property name is required',
+                  val => val.length <= 150 || 'Max 150 characters'
+                ]"
               />
               <q-input v-model="prop.value" label="Value" outlined dense class="col"
                 hide-bottom-space  
-                :rules="[val => !!val || 'Property value is required']"
+                :rules="[
+                  val => !!val || 'Property value is required',
+                  val => val.length <= 255 || 'Max 255 characters'
+                ]"
               />
               
               <q-btn
