@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Mvc;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 using System.Collections.Generic;
@@ -13,8 +14,10 @@ namespace UserVault.Controllers
     public class UsersController : ControllerBase
     {
         private readonly Repositories.UserRepository _userRepository;
-        public UsersController(Repositories.UserRepository userRepository)
+        private readonly IAntiforgery _antiforgery;
+        public UsersController(Repositories.UserRepository userRepository, IAntiforgery antiforgery)
         {
+            _antiforgery = antiforgery;
             _userRepository = userRepository;
         }
         [HttpGet]
@@ -37,6 +40,7 @@ namespace UserVault.Controllers
             return Ok(userDto);
         }
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [ProducesResponseType(typeof(UserDto), 201)]
         [ProducesResponseType(400)]
         public ActionResult<UserDto> CreateUser([FromBody] CreateUpdateUserDto userDto)
@@ -66,6 +70,7 @@ namespace UserVault.Controllers
             }
         }
         [HttpPut("{id}")]
+        [ValidateAntiForgeryToken]
         [ProducesResponseType(204)]
         [ProducesResponseType(400)]
         [ProducesResponseType(404)]
@@ -97,6 +102,7 @@ namespace UserVault.Controllers
         }
 
         [HttpDelete("{id}")]
+        [ValidateAntiForgeryToken]
         public ActionResult DeleteUser(int id)
         {
             if (id <= 0)
