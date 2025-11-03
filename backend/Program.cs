@@ -29,7 +29,7 @@ builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
     options.Cookie.Name = "XSRF-TOKEN";
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.None; //disable https for tests
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.HttpOnly = false;
 });
