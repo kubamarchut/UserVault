@@ -28,6 +28,10 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "X-XSRF-TOKEN";
+    options.Cookie.Name = "XSRF-TOKEN";
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.HttpOnly = false;
 });
 
 var app = builder.Build();
@@ -48,18 +52,5 @@ app.UseCors("AllowFrontend");
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
-
-app.MapGet("/api/csrf-token", (IAntiforgery antiforgery, HttpContext http) =>
-{
-    var tokens = antiforgery.GetAndStoreTokens(http);
-    http.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!,
-        new CookieOptions
-        {
-            HttpOnly = false,
-            Secure = true,
-            SameSite = SameSiteMode.Strict
-        });
-    return Results.Ok(new { token = tokens.RequestToken });
-});
 
 app.Run();

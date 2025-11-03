@@ -9,7 +9,7 @@ const api = axios.create({
 
 export default boot(async ({ app }) => {
   try {
-    const res = await api.get('/csrf-token')
+    const res = await api.get('/users/csrf-token')
     const token = res.data.token
 
     api.interceptors.request.use(config => {
