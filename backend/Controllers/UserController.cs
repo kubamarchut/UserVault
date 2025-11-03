@@ -40,10 +40,9 @@ namespace UserVault.Controllers
             return Ok(userDto);
         }
         [HttpPost]
-        [ValidateAntiForgeryToken]
         [ProducesResponseType(typeof(UserDto), 201)]
         [ProducesResponseType(400)]
-        public ActionResult<UserDto> CreateUser([FromBody] CreateUpdateUserDto userDto)
+        public ActionResult<UserDto> CreateUser([FromBody] CreateUpdateUserDto userDto, [FromServices] IAntiforgery antiforgery)
         {
             if (userDto == null)
                 return BadRequest("User data is required.");
@@ -52,6 +51,7 @@ namespace UserVault.Controllers
 
             try
             {
+                antiforgery.ValidateRequestAsync(HttpContext).GetAwaiter().GetResult();
                 _userRepository.AddUser(user);
 
                 var customProperties = user.GetCustomProperties().ToList();
@@ -70,17 +70,17 @@ namespace UserVault.Controllers
             }
         }
         [HttpPut("{id}")]
-        [ValidateAntiForgeryToken]
         [ProducesResponseType(204)]
         [ProducesResponseType(400)]
         [ProducesResponseType(404)]
-        public ActionResult UpdateUser(int id, [FromBody] CreateUpdateUserDto userDto)
+        public ActionResult UpdateUser(int id, [FromBody] CreateUpdateUserDto userDto, [FromServices] IAntiforgery antiforgery)
         {
             if (userDto == null)
                 return BadRequest("User data is required.");
 
             try
             {
+                antiforgery.ValidateRequestAsync(HttpContext).GetAwaiter().GetResult();
                 var user = Model.User.FromDto(id, userDto);
 
                 _userRepository.UpdateUser(user);
@@ -102,14 +102,14 @@ namespace UserVault.Controllers
         }
 
         [HttpDelete("{id}")]
-        [ValidateAntiForgeryToken]
-        public ActionResult DeleteUser(int id)
+        public ActionResult DeleteUser(int id, [FromServices] IAntiforgery antiforgery)
         {
             if (id <= 0)
                 return BadRequest("Invalid user ID.");
 
             try
             {
+                antiforgery.ValidateRequestAsync(HttpContext).GetAwaiter().GetResult();
                 _userRepository.RemoveUser(id);
                 return NoContent();
             }
