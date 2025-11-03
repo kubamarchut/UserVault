@@ -7,7 +7,7 @@ string connectionString = $"Server={(builder.Environment.IsDevelopment() ? "loca
 
 builder.Services.AddSingleton<UserRepository>(new UserRepository(connectionString));
 
-builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 
 builder.Services.AddCors(options =>
 {
@@ -17,6 +17,7 @@ builder.Services.AddCors(options =>
             policy.WithOrigins("http://localhost:9000")
                   .AllowAnyHeader()
                   .AllowAnyMethod()
+                  .AllowCredentials()
                   .WithExposedHeaders("Content-Disposition");
         });
 });
