@@ -6,13 +6,7 @@ const api = axios.create({
   withCredentials: true
 })
 
-export default boot(async ({ app }) => {
-  console.log("test")
-  const response = await api.get('/users/csrf-token')
-  const token = response.data.token
-
-  api.defaults.headers.common['X-XSRF-TOKEN'] = token
-
+export default boot(async({ app }) => {
   app.config.globalProperties.$axios = axios
   app.config.globalProperties.$api = api
 })
